@@ -1,0 +1,6 @@
+data.json
+FlexHelper.log
+/.idea/*
+*__pycache__
+*.dist-info
+*.egg-info
