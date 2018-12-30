@@ -1,29 +1,24 @@
-from os.path import dirname
-import sys
-sys.path.append(dirname(__file__))
-sys.path.append("./lib")
-
 import datetime
-import pathlib
-
-__author__ = 'digitalhigh'
-
-import os
-import sqlite3
 import json
-import requests
+import logging
+import os
+import pathlib
+import sqlite3
+import threading
+import time
+import xml.etree.ElementTree as elTree
+
 import pychromecast
+import requests
+import xmltodict
+from bottle import route, run, request, get, post
+from data import Data
+from flex_container import FlexContainer
+from monitor import Monitor
 from pychromecast.controllers.media import MediaController
 from pychromecast.controllers.plex import PlexController
-from bottle import route, run, request, get, post
-from monitor import Monitor
-import logging
-import xmltodict
-import time
-from data import Data
-import xml.etree.ElementTree as ET
 
-from flex_container import FlexContainer
+__author__ = 'digitalhigh'
 
 Log = logging.getLogger('FlexHelper')
 Log.setLevel(logging.DEBUG)
@@ -40,7 +35,7 @@ fh.setFormatter(formatter)
 # add the handlers to Log
 Log.addHandler(ch)
 Log.addHandler(fh)
-Dict = {}
+DICT = {}
 data = Data()
 
 META_TYPE_IDS = {
@@ -86,7 +81,7 @@ DEFAULT_CONTAINER_SIZE = 100000
 DEFAULT_CONTAINER_START = 0
 DATE_STRUCTURE = "%Y-%m-%d %H:%M:%S"
 
-Dict['version'] = '1.1.106'
+DICT['version'] = '1.1.106'
 NAME = 'Flex TV'
 VERSION = '1.1.106'
 APP_PREFIX = '/applications/Cast'
@@ -101,6 +96,40 @@ ICON_CAST_REFRESH = './Resources/icon-cast_refresh.png'
 ICON_PLEX_CLIENT = './Resources/icon-plex_client.png'
 TEST_CLIP = './Resources/test.mp3'
 PLUGIN_IDENTIFIER = "com.plexapp.plugins.FlexTV"
+
+
+####################################
+
+def cache_timer():
+    sec = 600
+    while True:
+        time.sleep(sec)
+        Log.debug("Cache timer started, updatings in 6 minutes, man")
+        update_cache()
+
+
+def update_cache():
+    Log.debug("UpdateCache calleds")
+    if data.Exists('last_cache'):
+        last_scan = float(data.Load('last_cache'))
+        now = float(time.time())
+        if now > last_scan:
+            time_diff = now - last_scan
+            time_mins = time_diff / 60
+            if time_mins > 10:
+                Log.debug("Scanning devices, it's been %s minutes since our last scan." % time_mins)
+                scan_devices()
+            else:
+                Log.debug("Devices will be re-cached in %s minutes" % round(10 - time_mins))
+        else:
+            time_diff = last_scan - now
+            time_mins = 10 - round(time_diff / 60)
+            Log.debug("Device scan set for %s minutes from now." % time_mins)
+
+        Log.debug("Diffs are %s and %s and %s." % (last_scan, now, time_diff))
+
+    else:
+        scan_devices()
 
 
 ####################################
@@ -122,7 +151,7 @@ def devices():
             dc = FlexContainer("Device", cast, show_size=False)
             mc.add(dc)
 
-    return mc.Content()
+    return mc.content()
 
 
 @route(APP_PREFIX + '/clients')
@@ -140,7 +169,7 @@ def clients():
         dc = FlexContainer("Device", cast, show_size=False)
         mc.add(dc)
 
-    return mc.Content()
+    return mc.content()
 
 
 @route(APP_PREFIX + '/resources')
@@ -180,16 +209,12 @@ def resources():
     return oc
 
 
-@route('/')
-def main():
-    return "Whazzaaaaaa"
-
-
-@get('/config') # or @route('/config')
+@get('/')
+@get('/config')  # or @route('/config')
 def config():
     uri = ''
     token = ''
-    path =''
+    path = ''
     if data.Exists('uri'):
         uri = data.Load('uri')
     if data.Exists('path'):
@@ -207,7 +232,7 @@ def config():
     ''' % (uri, token, path)
 
 
-@post('/config') # or @route('/login', method='POST')
+@post('/config')  # or @route('/login', method='POST')
 def set_config():
     uri = request.forms.get('uri')
     token = request.forms.get('token')
@@ -220,7 +245,7 @@ def set_config():
 
 @route(APP_PREFIX + '/rescan')
 @route(CAST_PREFIX + '/rescan')
-def Rescan():
+def rescan():
     """
     Endpoint to scan LAN for cast devices
     """
@@ -240,8 +265,8 @@ def play():
               'Username', 'Transienttoken', 'Queueid', 'Version', 'Primaryserverid',
               'Primaryserveruri', 'Primaryservertoken']
     values = sort_headers(params, False)
-    status = "Missing required headers and stuff"
-    msg = status
+    play_status = "Missing required headers and stuff"
+    msg = play_status
 
     if values is not False:
         Log.debug("Holy crap, we have all the headers we need.")
@@ -268,14 +293,14 @@ def play():
             pc.play_media(values, log_data)
         except (pychromecast.LaunchError, pychromecast.PyChromecastError):
             Log.debug('Error connecting to host.')
-            status = "Error"
+            play_status = "Error"
         finally:
             if pc is not False:
-                status = "Success"
+                play_status = "Success"
 
     oc = FlexContainer(attributes={
         'Name': 'Playback Status',
-        'Status': status,
+        'Status': play_status,
         'Message': msg
     })
 
@@ -283,7 +308,7 @@ def play():
 
 
 @route(CAST_PREFIX + '/cmd')
-def Cmd():
+def cast_cmd():
     """
     Media control command(s).
 
@@ -310,7 +335,6 @@ def Cmd():
     """
     Log.debug('Recieved a call to control playback')
     params = sort_headers(['Uri', 'Cmd', 'Val'], False)
-    status = "Missing paramaters"
     response = "Error"
 
     if params is not False:
@@ -354,7 +378,7 @@ def Cmd():
 
     oc = FlexContainer()
     oc.set('response', response)
-    return oc.Content()
+    return oc.content()
 
 
 @route(CAST_PREFIX + '/audio')
@@ -386,8 +410,8 @@ def audio():
 
     oc = FlexContainer()
     oc.set('status', status)
-    
-    return oc.Content
+
+    return oc.content
 
 
 @route(CAST_PREFIX + '/broadcast/test')
@@ -415,18 +439,17 @@ def test():
     oc = FlexContainer()
     oc.set('title', status)
 
-    return oc.Content()
+    return oc.content()
 
 
 @route(CAST_PREFIX + '/broadcast')
-def Broadcast():
+def broadcast():
     """
     Send audio to *all* cast devices on the network
     """
     Log.debug('Recieved a call to broadcast an audio clip.')
     params = ['Path']
     values = sort_headers(params, True)
-    status = "No clip specified"
     if values is not False:
         do = False
         casts = fetch_devices()
@@ -457,7 +480,6 @@ def Broadcast():
     else:
         do = FlexContainer()
         do.set('title', 'Test Broadcast')
-        status = "Foo"
 
     oc = FlexContainer()
     oc.set("Title", "Foo")
@@ -465,98 +487,98 @@ def Broadcast():
     if do is not False:
         oc.add(do)
 
-    return oc
+    return oc.content()
 
 
 ####################################
 # These are our /stat prefixes
 @route(STAT_PREFIX + '/tag')
-def All():
+def stat_tag_all():
     mc = build_tag_container("all")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/actor')
-def Actor():
+def stat_tag_actor():
     mc = build_tag_container("actor")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/director')
-def Director():
+def stat_tag_director():
     mc = build_tag_container("director")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/writer')
-def Writer():
+def stat_tag_writer():
     mc = build_tag_container("writer")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/genre')
-def Genre():
+def stat_tag_genre():
     mc = build_tag_container("genre")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/country')
-def Country():
+def stat_tag_country():
     mc = build_tag_container("country")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/mood')
-def Mood():
+def stat_tag_mood():
     mc = build_tag_container("mood")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/autotag')
-def Autotag():
+def stat_tag_autotag():
     mc = build_tag_container("autotag")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/collection')
-def Collection():
+def stat_tag_collection():
     mc = build_tag_container("collection")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/similar')
-def Similar():
+def stat_tag_similar():
     mc = build_tag_container("similar")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/year')
-def Year():
+def stat_tag_year():
     mc = build_tag_container("year")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/contentRating')
-def ContentRating():
+def stat_tag_content_rating():
     mc = build_tag_container("contentRating")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/studio')
-def Studio():
+def stat_tag_studio():
     mc = build_tag_container("studio")
-    return mc.Content()
+    return mc.content()
 
 
 # Rating (Reviews)
 @route(STAT_PREFIX + '/tag/score')
-def Score():
+def stat_tag_score():
     mc = build_tag_container("score")
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/library')
-def Library():
+def stat_library():
     mc = FlexContainer()
     Log.debug("Here's where we fetch some library stats.")
     sections = {}
@@ -638,16 +660,15 @@ def Library():
                 Log.debug("Hey, we got the unique count")
                 section_data["watchedItems"] = sec_unique_played["viewedItems"]
             ac = FlexContainer("Section", section_data, False)
-            bc = section_data
             for child in section_children:
                 ac.add(child)
             mc.add(ac)
 
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/library/growth')
-def Growth():
+def stat_library_growth():
     headers = sort_headers(["Interval", "Start", "End", "Type"])
     records = query_library_growth(headers)
     total_array = {}
@@ -697,7 +718,8 @@ def Growth():
                             records = month_array[d]
                             for record in records:
                                 record_type = record["type"]
-                                record["addedAt"] = int(time.mktime(time.strptime(record["addedAt"], "%Y-%m-%d %H:%M:%S")))
+                                record["addedAt"] = int(
+                                    time.mktime(time.strptime(record["addedAt"], "%Y-%m-%d %H:%M:%S")))
                                 tag_name = META_XML_TAGS.get(record_type) or "Undefined"
                                 ac = FlexContainer(tag_name, record, False)
                                 temp_day_count = types_day.get(record_type) or 0
@@ -724,12 +746,11 @@ def Growth():
                 year_container.set("%sCount" % rec_type, types_year.get(rec_type))
             grand_total += year_total
             mc.add(year_container)
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/library/popular')
-def Popular():
-
+def stat_library_popular():
     results = query_library_popular()
     mc = FlexContainer()
     for section in results:
@@ -770,11 +791,11 @@ def Popular():
             sc.add(me)
         mc.add(sc)
 
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/library/quality')
-def Quality():
+def stat_library_quality():
     results = query_library_quality()
     mc = FlexContainer()
     Log.debug("Record: %s" % json.dumps(results))
@@ -788,11 +809,11 @@ def Quality():
 
         mc.add(me)
 
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/system')
-def System():
+def stat_system():
     Log.debug("Querying system specs")
     headers = sort_headers(["Friendly"])
     friendly = headers.get("Friendly") or False
@@ -817,11 +838,11 @@ def System():
     mc.add(cpu_container)
     mc.add(hdd_container)
     mc.add(net_container)
-    return mc.Content()
+    return mc.content()
 
 
 @route(STAT_PREFIX + '/user')
-def User():
+def stat_user():
     users = query_user_stats()
     mc = FlexContainer()
     if users is not None:
@@ -864,16 +885,13 @@ def User():
 
         Log.debug("Still alive, returning data")
 
-        return mc.Content()
+        return mc.content()
 
 
-@route(CAST_PREFIX + '/status')
-@route(CAST_PREFIX + '/resources/status')
 @route("/stats/sessions")
-def status():
+def stat_sessions():
     """
     Fetch player status
-    TODO: Figure out how to parse and return additional data here
     """
     show_all = True
     headers = sort_headers(["Clienturi", "Clientname"])
@@ -883,7 +901,7 @@ def status():
         show_all = False
 
     chromecasts = fetch_devices()
-    devices = []
+    devices_list = []
     cast_devices = []
 
     for chromecast in chromecasts:
@@ -903,7 +921,7 @@ def status():
             if cast['type'] in ['cast', 'audio', 'group']:
                 cast_devices.append(cast)
             else:
-                devices.append(cast)
+                devices_list.append(cast)
 
     session_statuses = get_session_status()
 
@@ -917,7 +935,7 @@ def status():
             cast = False
             try:
                 cast = pychromecast.Chromecast(host, int(port), timeout=3, tries=1)
-            except Exception:
+            except pychromecast.ChromecastConnectionError:
                 Log.error("Unable to connecct to device.")
 
             if cast:
@@ -961,8 +979,8 @@ def status():
                     do.add(md)
                 mc.add(do)
 
-    if len(devices):
-        for device in devices:
+    if len(devices_list):
+        for device in devices_list:
             del device['status']
             do = FlexContainer("Device", attributes=device, show_size=False)
             meta_dict = False
@@ -997,8 +1015,7 @@ def status():
             so.add(md)
             mc.add(so)
 
-    return mc.Content()
-
+    return mc.content()
 
 
 ####################################
@@ -1037,7 +1054,7 @@ def fetch_devices():
             Log.debug("Gonna connect to %s" % myurl)
             req = requests.get(myurl)
             client_data = req.text
-            root = ET.fromstring(client_data)
+            root = elTree.fromstring(client_data)
             for device in root.iter('Server'):
                 local_item = {
                     "name": device.get('name'),
@@ -1053,7 +1070,6 @@ def fetch_devices():
 
 
 def fetch_servers():
-
     servers = []
 
     token = False
@@ -1075,7 +1091,7 @@ def fetch_servers():
         Log.debug("Gonna connect to %s" % myurl)
         req = requests.get(myurl)
         client_data = req.text
-        root = ET.fromstring(client_data)
+        root = elTree.fromstring(client_data)
         for device in root.iter('Server'):
             version = device.get("version").split("-")[0]
             local_item = {
@@ -1121,13 +1137,11 @@ def player_string(values):
     offset = values['Offset']
     server_id = values['Serverid']
     transcoder_video = values['Transcodervideo']
-    # TODO: Make this sexy, see if we can just use the current server. I think so.
     server_uri = values['Serveruri'].split("://")
     server_parts = server_uri[1].split(":")
     server_protocol = server_uri[0]
     server_ip = server_parts[0]
     server_port = server_parts[1]
-    # TODO: Look this up instead of send it?
     username = values['Username']
     true = "true"
     false = "false"
@@ -1259,8 +1273,8 @@ def query_users():
     if cursor is not None:
         query = """SELECT name, id from accounts;"""
 
-        for name, id in cursor.execute(query):
-            users[str(id)] = name
+        for name, user_id in cursor.execute(query):
+            users[str(user_id)] = name
 
         close_connection(connection)
     return users
@@ -1296,9 +1310,10 @@ def query_library_quality():
     if cursor is not None:
         query = """
             select md.title, md3.title as grandparentTitle, 
-            md.id as ratingKey, mi.width, mi.height, mi.size as fileSize, mi.duration, mi.bitrate, mi.container, mi.video_codec as videoCodec,
-            mi.audio_codec as audioCodec, mi.display_aspect_ratio as aspectRatio, mi.frames_per_second as framesPerSecond,
-            mi.audio_channels as audioChannels, md.library_section_id as sectionId, md.metadata_type as type,
+            md.id as ratingKey, mi.width, mi.height, mi.size as fileSize, mi.duration, mi.bitrate, mi.container, 
+            mi.video_codec as videoCodec, mi.audio_codec as audioCodec, mi.display_aspect_ratio as aspectRatio,
+            mi.frames_per_second as framesPerSecond, mi.audio_channels as audioChannels,
+            md.library_section_id as sectionId, md.metadata_type as type,
             ls.name as sectionName from media_items as mi
             inner join metadata_items as md
             on mi.metadata_item_id = md.id
@@ -1402,8 +1417,9 @@ def query_tag_stats(selection, headers):
             selector += " AND mt.metadata_type = %s" % meta_id
 
     if cursor is not None:
-        query = """SELECT tags.tag, tags.tag_type, mt.id, mt.title, lib.name as library_section, mt1.title as parent_title,
-                    mt2.title as grandparent_title, mt.metadata_type, mt.added_at, mt.year, lib.id as lib_id FROM taggings
+        query = """SELECT tags.tag, tags.tag_type, mt.id, mt.title, lib.name as library_section, 
+                    mt1.title as parent_title, mt2.title as grandparent_title, mt.metadata_type, mt.added_at, mt.year,
+                    lib.id as lib_id FROM taggings
                     LEFT JOIN tags ON tags.id = taggings.tag_id
                     INNER JOIN metadata_items AS mt
                     ON taggings.metadata_item_id = mt.id
@@ -1421,8 +1437,8 @@ def query_tag_stats(selection, headers):
         Log.debug("Query is '%s'" % query)
 
         for tag, tag_type, ratingkey, title, library_section, parent_title, \
-            grandparent_title, meta_type, added_at, year, lib_id in cursor.execute(query):
-
+                grandparent_title, meta_type, added_at, year, lib_id in cursor.execute(query):
+            tag_title = title
             if tag_type in tag_ids:
                 tag_title = tag_ids[tag_type]
 
@@ -1560,7 +1576,7 @@ def query_meta_stats(selection, headers):
         records = {}
         record_types = ["year", "contentRating", "studio", "score"]
         for title, rating_key, year, parent_title, grandparent_title, contentRating, studio, country, score, \
-            added_at, section, section_id, meta_type in cursor.execute(query):
+                added_at, section, section_id, meta_type in cursor.execute(query):
 
             if meta_type in META_TYPE_IDS:
                 meta_type = META_TYPE_IDS[meta_type]
@@ -1747,7 +1763,7 @@ def query_user_stats():
                     INNER JOIN statistics_bandwidth as sb
                      ON sb.at = sm.at AND sb.account_id = sm.account_id AND sb.device_id = sm.device_id
                     INNER JOIN accounts
-                     ON user_id = sm.account_id
+                     ON accounts.id = sm.account_id
                     INNER JOIN devices
                      ON devices.id = sm.device_id
                     %s
@@ -1831,7 +1847,7 @@ def query_user_stats():
         view_results = {}
         meta_count = 0
         for user_id, library_section, grandparent_title, parent_title, title, rating_key, genre, country, year, \
-            viewed_at, meta_type, user_name in cursor.execute(query, params):
+                viewed_at, meta_type, user_name in cursor.execute(query, params):
             meta_type = META_TYPE_IDS.get(meta_type) or meta_type
             last_viewed = int(time.mktime(datetime.datetime.strptime(viewed_at, "%Y-%m-%d %H:%M:%S").timetuple()))
 
@@ -2005,7 +2021,8 @@ def query_library_stats():
                 AND mi.library_section_id in %s
                 GROUP BY miv.metadata_type
             ) AS SecondSet
-        ON FirstSet.library_section_id = SecondSet.library_section_id AND FirstSet.metadata_type = SecondSet.metadata_type
+        ON FirstSet.library_section_id = SecondSet.library_section_id
+        AND FirstSet.metadata_type = SecondSet.metadata_type
         WHERE FirstSet.library_section_id in %s
         GROUP BY FirstSet.library_section_id, FirstSet.metadata_type
         ORDER BY FirstSet.library_section_id;""" % (entitlements, entitlements)
@@ -2013,8 +2030,7 @@ def query_library_stats():
         Log.debug("Querys is '%s'" % query)
         results = []
         for section, meta_type, item_count, play_count, ratingkey, title, \
-            grandparent_title, last_viewed, user_name, user_id, sec_name, sec_type in cursor.execute(
-            query):
+                grandparent_title, last_viewed, user_name, user_id, sec_name, sec_type in cursor.execute(query):
 
             meta_type = META_TYPE_IDS.get(meta_type) or meta_type
 
@@ -2101,7 +2117,6 @@ def query_library_growth(headers):
             WHERE mi1.created_at BETWEEN ? AND ?
             AND section in %s
             AND mi1.metadata_type IN (1, 4, 10)
-            AND mi1.title NOT IN ("", "com.plexapp.agents")
             ORDER BY mi1.created_at DESC;
         """ % entitlements
         params = (start_date, end_date)
@@ -2138,8 +2153,8 @@ def query_library_growth(headers):
     return results
 
 
-def log_data(data):
-    Log.debug("Is there data?? " + json.dumps(data))
+def log_data(data_in):
+    Log.debug("Is there data?? " + json.dumps(data_in))
 
 
 def query_library_popular():
@@ -2176,9 +2191,10 @@ def query_library_popular():
         query = """
             SELECT
                 sm.library_section_id as sectionId, sm.[index] as number, mi2.title as parentTitle, mi.rating,
-                sm.title, sm.viewed_at as lastViewed, mi.id as ratingKey, mi.tags_genre as genre, sm.account_id as userId, accounts.name as userName,
-                mi.metadata_type as type, mi2.id as parentRatingKey, mi2.metadata_type as parentType, mi2.[index] as parentIndex,
-                mi3.title as grandparentTitle, mi3.id as grandparentRatingKey, mi3.metadata_type as grandparentType
+                sm.title, sm.viewed_at as lastViewed, mi.id as ratingKey, mi.tags_genre as genre,
+                sm.account_id as userId, accounts.name as userName, mi.metadata_type as type, mi2.id as parentRatingKey,
+                mi2.metadata_type as parentType, mi2.[index] as parentIndex, mi3.title as grandparentTitle,
+                mi3.id as grandparentRatingKey, mi3.metadata_type as grandparentType
             FROM metadata_item_views as sm
             INNER JOIN metadata_items as mi
                 ON 
@@ -2306,10 +2322,10 @@ def query_library_popular():
         if meta_type == "episode":
             media["banner"] = "/library/metadata/" + str(media['ratingKey']) + "/banner/"
 
-        playCount = 0
-        for user, data in media["users"].items():
-            playCount += len(data["views"])
-        media['playCount'] = playCount
+        play_count = 0
+        for user, user_data in media["users"].items():
+            play_count += len(user_data["views"])
+        media['playCount'] = play_count
         meta_list.append(media)
         sorted_media[meta_type] = meta_list
 
@@ -2391,7 +2407,7 @@ def get_entitlements():
             Log.debug("Gonna touch myself at '%s'" % my_url)
             req = requests.get(my_url)
             client_data = req.text
-            root = ET.fromstring(client_data)
+            root = elTree.fromstring(client_data)
             for section in root.iter('Directory'):
                 Log.debug("Section?")
                 allowed_keys.append(section.get("key"))
@@ -2416,7 +2432,7 @@ def get_session_status():
             token = value
         if key in ("X-Plex-IncludeExtra", "IncludeExtra"):
             check = value
-            if (check == True) | (check == "true"):
+            if (check is True) | (check == "true"):
                 include_extra = True
 
     if token is False:
@@ -2488,19 +2504,19 @@ def get_time_difference(time_start, time_end):
 
 def sort_headers(header_list, strict=False):
     returns = {}
-    items = Merge(request.headers, request.query)
+    items = merge_dict(request.headers, request.query)
     for key, value in items.items():
 
         for item in header_list:
             if key in ("X-Plex-" + item, item):
                 value = str(value)
                 try:
-                    test = int(value)
+                    test_value = int(value)
                 except ValueError:
                     Log.debug("Value is not a string.")
                     pass
                 else:
-                    value = test
+                    value = test_value
                 Log.debug("Value for %s is '%s'" % (item, value))
 
                 returns[item] = value
@@ -2569,7 +2585,7 @@ def build_interval():
     return [start_date, end_date]
 
 
-def Merge(dict1, dict2):
+def merge_dict(dict1, dict2):
     out = {}
     for key, value in dict1.items():
         out[key] = value
@@ -2625,5 +2641,15 @@ def validate_date(date_text):
     return valid
 
 
-print("Executing")
-run(host="localhost", port=5666, debug=True)
+def runner():
+    """ Method that runs forever """
+    print("Executing")
+    run(host="localhost", port=5666, debug=True)
+
+
+thread = threading.Thread(target=runner)
+thread2 = threading.Thread(target=cache_timer)
+thread.daemon = True
+thread.start()
+update_cache()
+thread2.start()

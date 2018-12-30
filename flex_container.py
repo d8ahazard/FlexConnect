@@ -1,136 +1,10 @@
-import base64
 import json
-import operator
-import urllib
-from datetime import datetime
 from logging import getLogger
-from bottle import request, response
 from xml.sax.saxutils import escape, quoteattr
-import xmltodict
+
+from bottle import request, response
+
 Log = getLogger('FlexHelper')
-
-
-class Object(object):
-
-    def __init__(self, **kwargs):
-        # Add all class attributes that aren't private or functions
-        for key in self.__class__.__dict__:
-            if key[0] != "_" and self.__class__.__dict__[key].__class__.__name__ != "function":
-                self.__dict__[key] = self.__class__.__dict__[key]
-        self.__headers = {}
-
-        # Add all supplied argument attributes, unless the attribute is None and would overwrite an existing attribute
-        for key in kwargs:
-            if not (self.__dict__.has_key(key) and kwargs[key] == None):
-                self.__dict__[key] = kwargs[key]
-
-    def Content(self):
-        return None
-
-    def Status(self):
-        return "200 OK"
-
-    def Headers(self):
-        headerString = ""
-        for name in self.__headers:
-            headerString += "%s: %s\r\n" % (name, self.__headers[name])
-        return headerString
-
-    def SetHeader(self, name, value):
-        self.__headers[name] = value
-
-    def __repr__(self):
-        keys = self.__dict__.keys()
-        repr_str = self.__class__.__name__ + "(%s)"
-        arg_str = ""
-        for i in range(len(keys)):
-            key = keys[i]
-            obj = self.__dict__[key]
-            if key[0] != "_" and key != "tagName":
-                if arg_str != "": arg_str += ", "
-                if type(obj).__name__ == "function":
-                    arg_str += key + "=" + str(obj.__name__)
-                else:
-                    arg_str += key + "=" + repr(obj)
-        return repr_str % arg_str
-
-
-####################################################################################################
-
-class Container(Object):
-
-    def __init__(self, **kwargs):
-        Object.__init__(self, **kwargs)
-        self.__items__ = []
-
-    def __iter__(self):
-        return iter(self.__items__)
-
-    def __len__(self):
-        return len(self.__items__)
-
-    def __getitem__(self, key):
-        return self.__items__[key]
-
-    def __setitem__(self, key, value):
-        self.__items__[key] = value
-
-    def __delitem__(self, key):
-        del self.__items__[key]
-
-    def Append(self, obj):
-        return self.__items__.append(obj)
-
-    def Count(self, x):
-        return self.__items__.count(x)
-
-    def Index(self, x):
-        return self.__items__.index(x)
-
-    def Extend(self, x):
-        return self.__items__.extend(x)
-
-    def Insert(self, i, x):
-        return self.__items__.insert(i, x)
-
-    def Pop(self, i):
-        return self.__items__.pop(i)
-
-    def Remove(self, x):
-        return self.__items__.remove(x)
-
-    def Reverse(self):
-        self.__items__.reverse()
-
-    def Sort(self, attr):
-        self.__items__.sort(key=operator.attrgetter(attr))
-
-
-####################################################################################################
-
-class XMLObject(Object):
-    def __init__(self, **kwargs):
-        self.tagName = self.__class__.__name__
-        Object.__init__(self, **kwargs)
-        self.SetHeader("Content-Type", "application/xml")
-
-    def SetTagName(self, tagName):
-        self.tagName = tagName
-
-    def __str__(self):
-        if "key" in self.__dict__:
-            return self.key
-        else:
-            return repr(self)
-
-
-####################################################################################################
-
-class XMLContainer(XMLObject, Container):
-    def __init__(self, **kwargs):
-        self.tagName = self.__class__.__name__
-        Container.__init__(self, **kwargs)
-        self.SetHeader("Content-Type", "application/xml")
 
 
 class FlexContainer:
@@ -140,7 +14,7 @@ class FlexContainer:
         encoding = "xml"
         self.container_start = 0
         self.container_size = False
-        items = Merge(request.headers, request.query)
+        items = merge_dict(request.headers, request.query)
         for key, value in items.items():
             Log.debug("Key %s value %s" % (key, value))
             if (key == "Accept") | (key == "X-Plex-Accept"):
@@ -167,7 +41,7 @@ class FlexContainer:
             else:
                 self.set_content("application/json")
 
-    def Content(self):
+    def content(self):
         if self.encoding == "xml":
             encoded = self.to_xml()
             return encoded
@@ -195,7 +69,6 @@ class FlexContainer:
             return 0
         else:
             return len(self.children)
-
 
     def to_xml(self):
         s = escape(str(self.tag))
@@ -327,7 +200,8 @@ class FlexContainer:
                 output = "<%s/> % tag"
         return output
 
-def Merge(dict1, dict2):
+
+def merge_dict(dict1, dict2):
     out = {}
     for key, value in dict1.items():
         out[key] = value

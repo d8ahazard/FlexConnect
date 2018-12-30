@@ -4,6 +4,7 @@ Controller to interface with the Plex-app.
 import json
 from time import sleep
 from urllib.parse import urlparse
+import logging
 
 from pychromecast.controllers import BaseController
 from pychromecast.controllers.media import MediaController
@@ -25,6 +26,7 @@ TYPE_SEEK = "SEEK"
 TYPE_MEDIA_STATUS = 'MEDIA_STATUS'
 TYPE_GET_STATUS = "GET_STATUS"
 
+log = logging.getLogger('FlexHelper') 
 
 class PlexController(BaseController):
     """ Controller to interact with Plex namespace. """
@@ -70,6 +72,12 @@ class PlexController(BaseController):
         """ Send pause command. """
         self.request_id += 1
         self.send_message({MESSAGE_TYPE: TYPE_PAUSE})
+        
+    def seek(self, offset):
+        self.namespace = "urn:x-cast:plex"
+        """ Send seek command. """
+        self.request_id += 1
+        self.send_message({MESSAGE_TYPE: TYPE_SEEK, 'OFFSET': offset})
 
     def play(self):
         self.namespace = "urn:x-cast:plex"
@@ -115,14 +123,14 @@ class PlexController(BaseController):
         self.namespace = "urn:x-cast:plex"
 
         def app_launched_callback():
-            self.logger.debug("Application is launched")
+            log.debug("Application is launched")
             self.set_load(params, callback_function)
 
         receiver_ctrl = self._socket_client.receiver_controller
         receiver_ctrl.launch_app(self.app_id, callback_function=app_launched_callback)
 
     def set_load(self, params, callback_function):
-        self.logger.debug("Reached the load phase")
+        log.debug("Reached the load phase")
         self.namespace = "urn:x-cast:com.google.cast.media"
         play_queue_id = params['Queueid']
         content_id = params['Contentid']
@@ -152,14 +160,14 @@ class PlexController(BaseController):
             provider_identifier = "com.plexapp.plugins.library"
 
         if "provider.plex.tv" in content_id:
-            self.logger.debug("This is a pc, we need to format")
+            log.debug("This is a pc, we need to format")
             container_key = "{}?own=1".format(content_id)
             content_key = "/library/metadata/{}".format(play_queue_id)
         else:
             container_key = "/playQueues/{}?own=1".format(play_queue_id)
             content_key = content_id
 
-        self.logger.debug("Protocol, address, port and verified are %s %s %s and %s", protocol, address, port, verified)
+        log.debug("Protocol, address, port and verified are %s %s %s and %s", protocol, address, port, verified)
 
         server = {
                     "machineIdentifier": params["Serverid"],
@@ -243,7 +251,7 @@ class PlexController(BaseController):
                 }
             }
 
-        self.logger.debug("Sending media message: " + json.dumps(media))
+        log.debug("Sending media message: " + json.dumps(media))
 
         msg = {
             "type": "LOAD",
@@ -256,7 +264,7 @@ class PlexController(BaseController):
             "customData": None
         }
 
-        self.logger.debug("Sending playback message: " + json.dumps(msg))
+        log.debug("Sending playback message: " + json.dumps(msg))
 
         def parse_status(data):
             self.update_plex_status(data)
@@ -264,7 +272,7 @@ class PlexController(BaseController):
         self.send_message(msg, inc_session_id=True, callback_function=parse_status)
 
     def update_plex_status(self, data):
-        self.logger.debug("Got a request to update plex status: %s", json.dumps(data))
+        log.debug("Got a request to update plex status: %s", json.dumps(data))
         self.media_meta = data['status'][0]['media']['metadata']
         self.volume = self.cast.status.volume_level
         self.muted = self.cast.status.volume_muted
@@ -273,10 +281,10 @@ class PlexController(BaseController):
 
     def plex_status(self):
         self.namespace = "urn:x-cast:com.google.cast.media"
-        self.logger.debug("Plex status requested.")
+        log.debug("Plex status requested.")
 
         def parseada_status(data):
-            self.logger.debug("Callback fired?")
+            log.debug("Callback fired?")
             self.update_plex_status(data)
 
         self.send_message({MESSAGE_TYPE: TYPE_GET_STATUS}, callback_function=parseada_status)
@@ -293,9 +301,9 @@ class PlexController(BaseController):
 
     def receive_message(self, message, data):
         """ Called when a media message is received. """
-        self.logger.debug("Plex media receive function called.")
+        log.debug("Plex media receive function called.")
         if data[MESSAGE_TYPE] == TYPE_MEDIA_STATUS:
-            self.logger.debug("(DH) MESSAGE RECEIVED: " + data)
+            log.debug("(DH) MESSAGE RECEIVED: " + data)
             return True
 
         return False
@@ -314,7 +322,7 @@ class PlexController(BaseController):
         """ Tells listeners of a changed status. """
         for listener in self._status_listeners:
             try:
-                self.logger.debug("Doing a thing with a listener...")
+                log.debug("Doing a thing with a listener...")
             except Exception:  # pylint: disable=broad-except
                 pass
     def tear_down(self):
