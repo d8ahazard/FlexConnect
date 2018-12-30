@@ -4,3 +4,4 @@ FlexHelper.log
 *__pycache__
 *.dist-info
 *.egg-info
+*.db

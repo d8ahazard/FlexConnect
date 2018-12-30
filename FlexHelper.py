@@ -2382,8 +2382,8 @@ def close_connection(connection):
 def get_entitlements():
     token = False
     allowed_keys = []
-
-    for key, value in request.headers.items(), request.query.items():
+    inputs = merge_dict(request.headers, request.query)
+    for key, value in inputs.items():
         Log.debug("Header key %s is %s", key, value)
         if key in ("X-Plex-Token", "Token"):
             Log.debug("We have a Token")
