@@ -153,6 +153,7 @@ class FlexContainer:
             result = {
                 self.tag: json_obj
             }
+            result['version'] = "1.1.107"
             if self.show_size:
                 result['size'] = self_size
             json_string = json.dumps(result, sort_keys=False, indent=4, separators=(',', ': '))

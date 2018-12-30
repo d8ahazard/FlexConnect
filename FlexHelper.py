@@ -81,10 +81,10 @@ DEFAULT_CONTAINER_SIZE = 100000
 DEFAULT_CONTAINER_START = 0
 DATE_STRUCTURE = "%Y-%m-%d %H:%M:%S"
 
-DICT['version'] = '1.1.106'
+DICT['version'] = '1.1.107'
 NAME = 'Flex TV'
-VERSION = '1.1.106'
-APP_PREFIX = '/applications/Cast'
+VERSION = '1.1.107'
+APP_PREFIX = '/cast'
 CAST_PREFIX = '/chromecast'
 STAT_PREFIX = '/stats'
 ICON = './Resources/flextv.png'
