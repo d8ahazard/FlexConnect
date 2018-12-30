@@ -823,8 +823,6 @@ def System():
 @route(STAT_PREFIX + '/user')
 def User():
     users = query_user_stats()
-
-    Log.debug("Returning XML")
     mc = FlexContainer()
     if users is not None:
         for user in users:
@@ -2369,7 +2367,7 @@ def get_entitlements():
     token = False
     allowed_keys = []
 
-    for key, value in request.headers.items():
+    for key, value in request.headers.items(), request.query.items():
         Log.debug("Header key %s is %s", key, value)
         if key in ("X-Plex-Token", "Token"):
             Log.debug("We have a Token")
@@ -2490,7 +2488,8 @@ def get_time_difference(time_start, time_end):
 
 def sort_headers(header_list, strict=False):
     returns = {}
-    for key, value in request.headers.items():
+    items = Merge(request.headers, request.query)
+    for key, value in items.items():
 
         for item in header_list:
             if key in ("X-Plex-" + item, item):
@@ -2568,6 +2567,16 @@ def build_interval():
     start_date = datetime.datetime.strftime(start_int, DATE_STRUCTURE)
     end_date = datetime.datetime.strftime(end_int, DATE_STRUCTURE)
     return [start_date, end_date]
+
+
+def Merge(dict1, dict2):
+    out = {}
+    for key, value in dict1.items():
+        out[key] = value
+    for key, value in dict2.items():
+        out[key] = value
+
+    return out
 
 
 def validate_date(date_text):

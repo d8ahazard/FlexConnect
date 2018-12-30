@@ -7,7 +7,7 @@ from logging import getLogger
 from bottle import request, response
 from xml.sax.saxutils import escape, quoteattr
 import xmltodict
-Log = getLogger()
+Log = getLogger('FlexHelper')
 
 
 class Object(object):
@@ -140,7 +140,9 @@ class FlexContainer:
         encoding = "xml"
         self.container_start = 0
         self.container_size = False
-        for key, value in request.headers.items():
+        items = Merge(request.headers, request.query)
+        for key, value in items.items():
+            Log.debug("Key %s value %s" % (key, value))
             if (key == "Accept") | (key == "X-Plex-Accept"):
                 if (value == "application/json") | (value == "json"):
                     encoding = "json"
@@ -325,4 +327,11 @@ class FlexContainer:
                 output = "<%s/> % tag"
         return output
 
+def Merge(dict1, dict2):
+    out = {}
+    for key, value in dict1.items():
+        out[key] = value
+    for key, value in dict2.items():
+        out[key] = value
 
+    return out
