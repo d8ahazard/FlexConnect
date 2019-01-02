@@ -1,7 +1,7 @@
 """
 PyChromecast: remote control your Chromecast
 """
-import logging
+from logging import getLogger
 import fnmatch
 
 # pylint: disable=wildcard-import
@@ -13,6 +13,8 @@ from .discovery import discover_chromecasts, start_discovery, stop_discovery
 from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
     CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
+
+Log = getLogger('FlexHelper')
 
 __all__ = (
     '__version__', '__version_info__', 'get_chromecasts', 'Chromecast',
@@ -124,7 +126,7 @@ class Chromecast(object):
         retry_wait = kwargs.pop('retry_wait', None)
         blocking = kwargs.pop('blocking', True)
 
-        self.logger = logging.getLogger(__name__)
+        self.logger = getLogger("FlexHelper")
 
         # Resolve host to IP address
         self.host = host

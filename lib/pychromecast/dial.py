@@ -3,9 +3,11 @@ Implements the DIAL-protocol to communicate with the Chromecast
 """
 from collections import namedtuple
 from uuid import UUID
+import logging
 
 import requests
 
+Log = logging.getLogger('FlexHelper')
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
 FORMAT_BASE_URL = "http://{}:8008"
@@ -19,13 +21,16 @@ CAST_TYPE_CHROMECAST = 'cast'
 CAST_TYPE_AUDIO = 'audio'
 # Cast Audio group device, supports only audio
 CAST_TYPE_GROUP = 'group'
+# Home hub
+CAST_TYPE_HUB = 'cast'
 
 CAST_TYPES = {
     'chromecast': CAST_TYPE_CHROMECAST,
     'eureka dongle': CAST_TYPE_CHROMECAST,
     'chromecast audio': CAST_TYPE_AUDIO,
     'google home': CAST_TYPE_AUDIO,
-    'google cast group': CAST_TYPE_GROUP,
+    'google home hub': CAST_TYPE_CHROMECAST,
+    'google cast group': CAST_TYPE_GROUP
 }
 
 

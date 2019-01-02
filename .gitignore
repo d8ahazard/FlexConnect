@@ -3,5 +3,6 @@ FlexHelper.log
 /.idea/*
 *__pycache__
 *.dist-info
-*.egg-info
+*.egg
+/venv
 *.db

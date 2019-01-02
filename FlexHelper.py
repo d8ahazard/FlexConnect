@@ -1,3 +1,8 @@
+from os.path import dirname
+import sys
+sys.path.append(dirname(__file__))
+sys.path.append("./lib")
+
 import datetime
 import json
 import logging
@@ -109,7 +114,7 @@ def cache_timer():
 
 
 def update_cache():
-    Log.debug("UpdateCache calleds")
+    Log.debug("UpdateCache called")
     if data.Exists('last_cache'):
         last_scan = float(data.Load('last_cache'))
         now = float(time.time())
@@ -206,7 +211,12 @@ def resources():
 
         oc.add(do)
 
-    return oc
+    return oc.content()
+
+
+@get('/test')
+def test_connection():
+    return 'Success'
 
 
 @get('/')
@@ -1064,9 +1074,9 @@ def fetch_devices():
                     "app": "Plex Client",
                     "id": device.get('machineIdentifier')
                 }
-                casts.append(local_item)
+                cast_list.append(local_item)
 
-    return casts
+    return cast_list
 
 
 def fetch_servers():
@@ -2644,7 +2654,7 @@ def validate_date(date_text):
 def runner():
     """ Method that runs forever """
     print("Executing")
-    run(host="localhost", port=5666, debug=True)
+    run(host="0.0.0.0", port=5667, debug=True)
 
 
 thread = threading.Thread(target=runner)

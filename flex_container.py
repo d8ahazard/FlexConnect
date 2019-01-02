@@ -16,7 +16,6 @@ class FlexContainer:
         self.container_size = False
         items = merge_dict(request.headers, request.query)
         for key, value in items.items():
-            Log.debug("Key %s value %s" % (key, value))
             if (key == "Accept") | (key == "X-Plex-Accept"):
                 if (value == "application/json") | (value == "json"):
                     encoding = "json"
