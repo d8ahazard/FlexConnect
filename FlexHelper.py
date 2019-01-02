@@ -1031,14 +1031,15 @@ def stat_sessions():
 ####################################
 # These functions are for cast-related stuff
 def fetch_devices():
+    cast_list = []
     if not data.Exists('device_json'):
         Log.debug("No cached data exists, re-scanning.")
-        casts = scan_devices()
+        cast_list = scan_devices()
 
     else:
         Log.debug("Returning cached data")
         casts_string = data.Load('device_json')
-        casts = json.loads(casts_string)
+        cast_list = json.loads(casts_string)
 
     token = False
     for key, value in request.headers.items():
