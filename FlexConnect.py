@@ -2376,7 +2376,7 @@ def query_library_popular():
 def fetch_cursor():
     if data.Exists('path'):
         path = data.Load('path')
-        path = pathlib.Path(path)
+        path = str(pathlib.Path(path))
     else:
         Log.debug("NO PATH FOR DB")
         return False
