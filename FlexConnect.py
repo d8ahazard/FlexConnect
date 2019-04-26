@@ -17,7 +17,7 @@ import xml.etree.ElementTree as elTree
 import pychromecast
 import requests
 import xmltodict
-from bottle import route, run, request, get, post
+from bottle import route, run, request, get, post, auth_basic, HTTPResponse
 from data import Data
 from flex_container import FlexContainer
 from monitor import Monitor
@@ -144,10 +144,12 @@ def update_cache():
 @route(CAST_PREFIX + '/devices')
 def devices():
     """
-
     Endpoint to scan LAN for cast devices
     """
     Log.debug('Fetchings /devices endpoint.')
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     # Grab our response header?
     casts = fetch_devices()
     mc = FlexContainer()
@@ -166,7 +168,10 @@ def clients():
     """
     Endpoint to scan LAN for cast devices
     """
-    Log.debug('Recieved a call to fetch all devices')
+    Log.debug('Received a call to fetch all devices')
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     # Grab our response header?
     casts = fetch_devices()
 
@@ -185,6 +190,9 @@ def resources():
     Endpoint to scan LAN for cast devices
     """
     Log.debug('Received a call to fetch devices')
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     # Grab our response header?
     casts = fetch_devices()
 
@@ -220,8 +228,56 @@ def test_connection():
     return 'Success'
 
 
+def check(user, pw):
+    if data.Exists('auth'):
+        admin = data.Load('auth')
+    else:
+        admin = False
+    if admin:
+        Log.debug("Checking credentials %s %s" % (user, pw))
+        if data.Exists('username'):
+            username = data.Load('username')
+        else:
+            username = "flexconnect"
+
+        if data.Exists('password'):
+            password = data.Load('password')
+        else:
+            password = "flexconnect"
+
+        if (password == pw) & (user == username):
+            return True
+        return False
+    else:
+        Log.debug("No auth, returning true.")
+        return True
+
+
+def check_token():
+    if data.Exists('auth'):
+        auth = data.Load('auth')
+    else:
+        auth = False
+
+    if auth:
+        headers = sort_headers(["Token"])
+        if "Token" in headers:
+            token = headers.get("Token")
+        else:
+            return False
+        if data.Exists('token'):
+            check_val = data.Load('token')
+            return check_val == token
+        else:
+            return False
+
+    else:
+        return True
+
+
 @get('/')
 @get('/config')  # or @route('/config')
+@auth_basic(check)
 def config():
     uri = ''
     token = ''
@@ -231,16 +287,33 @@ def config():
     if data.Exists('path'):
         path = str(data.Load('path'))
         Log.debug("Path is " + path)
+    if data.Exists('password'):
+        password = data.Load('password')
+    else:
+        password = ""
+    if data.Exists("auth"):
+        admin = data.Load('auth')
+    else:
+        admin = False
     if data.Exists('token'):
         token = data.Load('token')
+    if admin:
+        checked = " checked"
+        Log.debug("Admin is enabled, checking box.")
+    else:
+        checked = ""
+        Log.debug("Admin is disabled")
+
     return '''
         <form action="/config" method="post">
-            Server URI: <input name="uri" type="text" value="%s" />
-            Server Token: <input name="token" type="text" value="%s" />
-            DB Path: <input name="path" type="text" value="%s" />
-            <input value="Save" type="submit" />
+            Server URI: <input name="uri" type="text" value="%s" /><br>
+            Server Token: <input name="token" type="text" value="%s" /><br>
+            DB Path: <input name="path" type="text" value="%s" /><br>
+            Admin Password: <input name="password" type="text" value="%s" /><br>
+            Require password: <input name="admin" type="checkbox" %s/><br>
+            <input value="Save" type="submit" /><br>
         </form>
-    ''' % (uri, token, path)
+    ''' % (uri, token, path, password, checked)
 
 
 @post('/config')  # or @route('/login', method='POST')
@@ -248,9 +321,16 @@ def set_config():
     uri = request.forms.get('uri')
     token = request.forms.get('token')
     path = request.forms.get('path')
+    password = request.forms.get('password')
+    admin = request.forms.get('admin')
+    Log.debug("Admin is %s" % admin)
+    auth = admin == "on"
+
     data.Save('uri', uri)
     data.Save('token', token)
     data.Save('path', path)
+    data.Save('password', password)
+    data.Save('auth', auth)
     return "<p>Config saved.</p>"
 
 
@@ -272,6 +352,9 @@ def play():
     Endpoint to play media.
     """
     Log.debug('Recieved a call to play media.')
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     params = ['Clienturi', 'Contentid', 'Contenttype', 'Serverid', 'Serveruri',
               'Username', 'Transienttoken', 'Queueid', 'Version', 'Primaryserverid',
               'Primaryserveruri', 'Primaryservertoken']
@@ -345,6 +428,9 @@ def cast_cmd():
 
     """
     Log.debug('Recieved a call to control playback')
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     params = sort_headers(['Uri', 'Cmd', 'Val'], False)
     response = "Error"
 
@@ -399,6 +485,9 @@ def audio():
     """
 
     Log.debug('Recieved a call to play an audio clip.')
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     params = ['Uri', 'Path']
     values = sort_headers(params, True)
     status = "Missing required headers"
@@ -428,6 +517,9 @@ def audio():
 @route(CAST_PREFIX + '/broadcast/test')
 def test():
     values = {'Path': "./Resources/test.mp3"}
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     casts = fetch_devices()
     status = "Test successful!"
     try:
@@ -459,6 +551,9 @@ def broadcast():
     Send audio to *all* cast devices on the network
     """
     Log.debug('Recieved a call to broadcast an audio clip.')
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     params = ['Path']
     values = sort_headers(params, True)
     if values is not False:
@@ -505,78 +600,117 @@ def broadcast():
 # These are our /stat prefixes
 @route(STAT_PREFIX + '/tag')
 def stat_tag_all():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("all")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/actor')
 def stat_tag_actor():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("actor")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/director')
 def stat_tag_director():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("director")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/writer')
 def stat_tag_writer():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("writer")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/genre')
 def stat_tag_genre():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("genre")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/country')
 def stat_tag_country():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("country")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/mood')
 def stat_tag_mood():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("mood")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/autotag')
 def stat_tag_autotag():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("autotag")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/collection')
 def stat_tag_collection():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("collection")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/similar')
 def stat_tag_similar():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("similar")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/year')
 def stat_tag_year():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("year")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/contentRating')
 def stat_tag_content_rating():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("contentRating")
     return mc.content()
 
 
 @route(STAT_PREFIX + '/tag/studio')
 def stat_tag_studio():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("studio")
     return mc.content()
 
@@ -584,6 +718,9 @@ def stat_tag_studio():
 # Rating (Reviews)
 @route(STAT_PREFIX + '/tag/score')
 def stat_tag_score():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     mc = build_tag_container("score")
     return mc.content()
 
@@ -592,6 +729,9 @@ def stat_tag_score():
 def stat_library():
     mc = FlexContainer()
     Log.debug("Here's where we fetch some library stats.")
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     sections = {}
     recs = query_library_stats()
     sizes = query_library_sizes()
@@ -680,6 +820,9 @@ def stat_library():
 
 @route(STAT_PREFIX + '/library/growth')
 def stat_library_growth():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     headers = sort_headers(["Interval", "Start", "End", "Type"])
     records = query_library_growth(headers)
     total_array = {}
@@ -762,6 +905,9 @@ def stat_library_growth():
 
 @route(STAT_PREFIX + '/library/popular')
 def stat_library_popular():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     results = query_library_popular()
     mc = FlexContainer()
     for section in results:
@@ -807,6 +953,9 @@ def stat_library_popular():
 
 @route(STAT_PREFIX + '/library/quality')
 def stat_library_quality():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     results = query_library_quality()
     mc = FlexContainer()
     Log.debug("Record: %s" % json.dumps(results))
@@ -826,6 +975,9 @@ def stat_library_quality():
 @route(STAT_PREFIX + '/system')
 def stat_system():
     Log.debug("Querying system specs")
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     headers = sort_headers(["Friendly"])
     friendly = headers.get("Friendly") or False
     mon = Monitor(friendly)
@@ -854,6 +1006,9 @@ def stat_system():
 
 @route(STAT_PREFIX + '/user')
 def stat_user():
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     users = query_user_stats()
     mc = FlexContainer()
     if users is not None:
@@ -904,6 +1059,9 @@ def stat_sessions():
     """
     Fetch player status
     """
+    if not check_token():
+        Log.debug("TOKEN CHECK FAILED!!")
+        return HTTPResponse(status=401)
     show_all = True
     headers = sort_headers(["Clienturi", "Clientname"])
     uri = headers.get("Clienturi") or False
@@ -2380,14 +2538,14 @@ def fetch_cursor():
     else:
         Log.debug("NO PATH FOR DB")
         return False
-
+    Log.debug("Connecting to path at %s" % path)
     connection = sqlite3.connect(path)
     cursor = connection.cursor()
     return [cursor, connection]
 
 
 def close_connection(connection):
-    Log.debug("No. I don't wanna.")
+    Log.debug("Closing connection.")
     connection.close()
 
 
