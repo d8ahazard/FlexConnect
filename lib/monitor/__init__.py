@@ -7,7 +7,7 @@ from OSHelper import get_os_name
 from cmd import run_command
 
 
-log = logging.getLogger('FlexHelper')
+log = logging.getLogger('FlexConnect')
 
 
 def to_base(value):

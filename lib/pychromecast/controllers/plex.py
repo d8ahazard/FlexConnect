@@ -26,7 +26,7 @@ TYPE_SEEK = "SEEK"
 TYPE_MEDIA_STATUS = 'MEDIA_STATUS'
 TYPE_GET_STATUS = "GET_STATUS"
 
-log = logging.getLogger('FlexHelper') 
+log = logging.getLogger('FlexConnect') 
 
 class PlexController(BaseController):
     """ Controller to interact with Plex namespace. """

@@ -14,7 +14,7 @@ from .dial import get_device_status, reboot, DeviceStatus, CAST_TYPES, \
     CAST_TYPE_CHROMECAST
 from .controllers.media import STREAM_TYPE_BUFFERED  # noqa
 
-Log = getLogger('FlexHelper')
+Log = getLogger('FlexConnect')
 
 __all__ = (
     '__version__', '__version_info__', 'get_chromecasts', 'Chromecast',
@@ -126,7 +126,7 @@ class Chromecast(object):
         retry_wait = kwargs.pop('retry_wait', None)
         blocking = kwargs.pop('blocking', True)
 
-        self.logger = getLogger("FlexHelper")
+        self.logger = getLogger("FlexConnect")
 
         # Resolve host to IP address
         self.host = host

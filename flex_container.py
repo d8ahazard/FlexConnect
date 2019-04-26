@@ -4,7 +4,7 @@ from xml.sax.saxutils import escape, quoteattr
 
 from bottle import request, response
 
-Log = getLogger('FlexHelper')
+Log = getLogger('FlexConnect')
 
 
 class FlexContainer:

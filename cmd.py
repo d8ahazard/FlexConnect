@@ -3,7 +3,7 @@ import subprocess
 import logging
 from time import sleep
 
-log = logging.getLogger('FlexHelper')
+log = logging.getLogger('FlexConnect')
 
 
 def run_command(command, single=True):
