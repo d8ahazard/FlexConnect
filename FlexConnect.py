@@ -229,7 +229,7 @@ def config():
     if data.Exists('uri'):
         uri = data.Load('uri')
     if data.Exists('path'):
-        path = data.Load('path')
+        path = str(data.Load('path'))
         Log.debug("Path is " + path)
     if data.Exists('token'):
         token = data.Load('token')
