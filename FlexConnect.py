@@ -262,7 +262,7 @@ def rescan():
     """
     Log.debug('Recieved a call to rescan devices')
     # Grab our response header?
-    # UpdateCache()
+    update_cache()
     return True
 
 
