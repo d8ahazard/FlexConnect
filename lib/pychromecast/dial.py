@@ -3,11 +3,9 @@ Implements the DIAL-protocol to communicate with the Chromecast
 """
 from collections import namedtuple
 from uuid import UUID
-import logging
 
 import requests
 
-Log = logging.getLogger('FlexHelper')
 XML_NS_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
 
 FORMAT_BASE_URL = "http://{}:8008"

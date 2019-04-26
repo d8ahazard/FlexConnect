@@ -3,6 +3,7 @@ import sys
 sys.path.append(dirname(__file__))
 sys.path.append("./lib")
 
+from scapy.all import *
 import datetime
 import json
 import logging
@@ -2658,9 +2659,36 @@ def runner():
     run(host="0.0.0.0", port=5667, debug=True)
 
 
+def custom_action(los_packet):
+    src_uri = los_packet[0][1].src
+    dest_uri = los_packet[0][1].dst
+    if data.Exists('device_json'):
+        match = False
+        for cast_dev in json.loads(data.Load('device_json')):
+            cast_ip = cast_dev['uri'].split(":")[0]
+            if (cast_ip == dest_uri) | (cast_ip == src_uri):
+                if cast_ip == dest_uri:
+                    dest_uri = cast_dev['name']
+                if cast_ip == src_uri:
+                    src_uri = cast_dev['name']
+                match = True
+        if src_uri == "192.168.1.120":
+            match = False
+        if dest_uri == "192.168.1.120":
+            match = False
+        if match:
+            Log.debug('Packet Match: {} ==> {}'.format(src_uri, dest_uri))
+
+
+def socket_spy():
+    sniff(filter='tcp or udp', prn=custom_action)
+
+
 thread = threading.Thread(target=runner)
 thread2 = threading.Thread(target=cache_timer)
+thread3 = threading.Thread(target=socket_spy)
 thread.daemon = True
 thread.start()
 update_cache()
 thread2.start()
+thread3.start()

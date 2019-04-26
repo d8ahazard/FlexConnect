@@ -393,6 +393,7 @@ class SocketClient(threading.Thread):
             return 1
 
         # See if any handlers will accept this message
+        self.logger.debug("Here's a message: %s" % json.dumps(data))
         self._route_message(message, data)
 
         if REQUEST_ID in data:
